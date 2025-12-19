@@ -1,9 +1,14 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'docker:26.1.3'
+            args '-v /var/run/docker.sock:/var/run/docker.sock'
+        }
+    }
 
     environment {
         DOCKER_IMAGE = "bankingapp:latest"
-        KUBECONFIG = "/var/lib/jenkins/.kube/config"
+        KUBECONFIG = '/var/lib/jenkins/.kube/config'
     }
 
     stages {
@@ -14,24 +19,12 @@ pipeline {
             }
         }
 
-        stage('Tooling Setup') {
+        stage('Verify Tools') {
             steps {
                 sh '''
-                  sudo apt-get update
-                  sudo apt-get install -y wget apt-transport-https gnupg lsb-release curl
-
-                  if ! command -v trivy >/dev/null; then
-                    wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
-                    echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
-                    sudo apt-get update
-                    sudo apt-get install -y trivy
-                  fi
-
-                  if ! command -v kubectl >/dev/null; then
-                    curl -LO https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl
-                    chmod +x kubectl
-                    sudo mv kubectl /usr/local/bin/
-                  fi
+                  docker --version
+                  kubectl version --client || true
+                  trivy --version || true
                 '''
             }
         }
@@ -39,7 +32,7 @@ pipeline {
         stage('Verify Kubernetes Cluster') {
             steps {
                 sh '''
-                  kubectl config use-context minikube
+                  kubectl config get-contexts
                   kubectl get nodes
                 '''
             }
@@ -53,7 +46,7 @@ pipeline {
 
         stage('Trivy Image Scan') {
             steps {
-                sh 'trivy image --severity HIGH,CRITICAL $DOCKER_IMAGE'
+                sh 'trivy image --severity HIGH,CRITICAL --no-progress $DOCKER_IMAGE'
             }
         }
 
@@ -69,7 +62,7 @@ pipeline {
 
     post {
         always {
-            sh 'docker image prune -f || true'
+            sh 'docker image prune -f'
         }
         success {
             echo '✅ Pipeline completed successfully!'
