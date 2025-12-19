@@ -58,8 +58,8 @@ pipeline {
     stage('Deploy to Kubernetes') {
       steps {
         sh '''
-          sed -i "s|your-dockerhub-username/banking-app:v1|$IMAGE_NAME:$IMAGE_TAG|g" k8s/deployment.yaml
-          kubectl apply -f k8s/
+          sed -i "s|your-dockerhub-username/banking-app:v1|$IMAGE_NAME:$IMAGE_TAG|g" kubernetes/deployment.yaml
+          kubectl apply -f kubernetes/
           kubectl rollout status deployment/banking-frontend --timeout=180s
         '''
       }
