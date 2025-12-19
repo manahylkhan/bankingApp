@@ -1,35 +1,39 @@
-# Stage 1: Build the React application
+# Stage 1: Build the frontend
 FROM node:20-alpine AS build
 
+# Set working directory
 WORKDIR /app
 
-# Copy package files first to leverage Docker cache for layers
+# Copy package.json and package-lock.json
 COPY package*.json ./
 
 # Install dependencies
 RUN npm install
 
-# Copy the rest of the application code
+# Copy all source files
 COPY . .
 
-# Build the production application
+# Build the frontend for production
 RUN npm run build
 
-# Stage 2: Serve the application using Nginx
+# Stage 2: Serve the app with nginx
 FROM nginx:alpine
 
-# Security: Remove default Nginx pages
+# Remove default nginx website
 RUN rm -rf /usr/share/nginx/html/*
 
-# Copy the build output from the previous stage
+# Copy built frontend from previous stage
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Security: Set up a non-root user (Best practice for container hardening)
+# Set proper permissions
 RUN touch /var/run/nginx.pid && \
     chown -R nginx:nginx /var/run/nginx.pid /var/cache/nginx /var/log/nginx /usr/share/nginx/html
 
+# Use nginx user
 USER nginx
 
+# Expose port 80
 EXPOSE 80
 
+# Start nginx
 CMD ["nginx", "-g", "daemon off;"]
