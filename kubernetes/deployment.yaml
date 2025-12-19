@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: banking-frontend
+  labels:
+    app: banking-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: banking-app
+  template:
+    metadata:
+      labels:
+        app: banking-app
+    spec:
+      securityContext:
+        # Security: Prevent running as root user
+        runAsNonRoot: true
+        runAsUser: 101
+        fsGroup: 101
+      containers:
+      - name: banking-app
+        image: your-dockerhub-username/banking-app:v1 # Replace with your image
+        ports:
+        - containerPort: 80
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+        securityContext:
+          # Security: Prevent privilege escalation
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false # Set to true if Nginx is configured for it
