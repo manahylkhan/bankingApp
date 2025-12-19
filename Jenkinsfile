@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         DOCKER_IMAGE = "bankingapp:latest"
-        KUBECONFIG = '/var/lib/jenkins/.kube/config'
+        KUBECONFIG = "/var/lib/jenkins/.kube/config"
     }
 
     stages {
@@ -16,37 +16,32 @@ pipeline {
 
         stage('Tooling Setup') {
             steps {
-                script {
-                    echo "Installing DevSecOps tools..."
+                sh '''
+                  sudo apt-get update
+                  sudo apt-get install -y wget apt-transport-https gnupg lsb-release curl
 
-                    sh '''
-                      sudo apt-get update
+                  if ! command -v trivy >/dev/null; then
+                    wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+                    echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
+                    sudo apt-get update
+                    sudo apt-get install -y trivy
+                  fi
 
-                      # Base tools
-                      sudo apt-get install -y wget apt-transport-https gnupg lsb-release curl
-
-                      # Trivy
-                      if ! command -v trivy >/dev/null 2>&1; then
-                        wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | apt-key add -
-                        echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" > /etc/apt/sources.list.d/trivy.list
-                        apt-get update
-                        apt-get install -y trivy
-                      fi
-
-                      # Kubectl
-                      if ! command -v kubectl >/dev/null 2>&1; then
-                        curl -LO https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl
-                        chmod +x kubectl
-                        mv kubectl /usr/local/bin/
-                      fi
-                    '''
-                }
+                  if ! command -v kubectl >/dev/null; then
+                    curl -LO https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl
+                    chmod +x kubectl
+                    sudo mv kubectl /usr/local/bin/
+                  fi
+                '''
             }
         }
 
         stage('Verify Kubernetes Cluster') {
             steps {
-                sh 'kubectl version --client'
+                sh '''
+                  kubectl config use-context minikube
+                  kubectl get nodes
+                '''
             }
         }
 
@@ -62,39 +57,25 @@ pipeline {
             }
         }
 
-        stage('Push to Registry') {
-            when {
-                expression { env.DOCKERHUB_USERNAME != null }
-            }
-            steps {
-                sh '''
-                  echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
-                  docker tag $DOCKER_IMAGE $DOCKERHUB_USERNAME/$DOCKER_IMAGE
-                  docker push $DOCKERHUB_USERNAME/$DOCKER_IMAGE
-                '''
-            }
-        }
-
         stage('Deploy to Kubernetes') {
             steps {
                 sh '''
-                  kubectl config use-context minikube
                   kubectl apply -f k8s/
                   kubectl rollout status deployment/secure-bank-pro --timeout=5m
                 '''
-    }
-}
+            }
+        }
     }
 
     post {
         always {
-            sh 'docker image prune -f'
-        }
-        failure {
-            echo '❌ Pipeline failed! Check logs.'
+            sh 'docker image prune -f || true'
         }
         success {
             echo '✅ Pipeline completed successfully!'
+        }
+        failure {
+            echo '❌ Pipeline failed! Check logs.'
         }
     }
 }
