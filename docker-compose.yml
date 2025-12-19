@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  banking-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: secure-bank-pro:v1
+    container_name: banking-frontend
+    ports:
+      - "80:80"
+    networks:
+      - secure-network
+    # Security: Read-only filesystem for the container where possible
+    read_only: false 
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+
+networks:
+  secure-network:
+    driver: bridge

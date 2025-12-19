@@ -1,0 +1,15 @@
+Processed,Method,URI,Flags
+TRUE,GET,http://localhost,Seed
+TRUE,GET,http://localhost/robots.txt,Seed
+TRUE,GET,http://localhost/sitemap.xml,Seed
+TRUE,GET,http://localhost/,Seed
+TRUE,GET,http://localhost/assets,Seed
+TRUE,GET,http://localhost/assets/index-ChWqsiRt.css,Seed
+TRUE,GET,http://localhost/assets/index-G1fkhtb2.js,Seed
+TRUE,GET,http://localhost/vite.svg,
+TRUE,GET,http://localhost/assets/,
+FALSE,GET,http://www.w3.org/2000/svg,Out of Scope
+FALSE,GET,http://www.w3.org/1999/xlink,Out of Scope
+FALSE,GET,https://react.dev/errors/,Out of Scope
+FALSE,GET,http://www.w3.org/1998/Math/MathML,Out of Scope
+FALSE,GET,http://www.w3.org/XML/1998/namespace,Out of Scope
