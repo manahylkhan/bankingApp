@@ -2,7 +2,7 @@ pipeline {
     agent {
         docker {
             image 'docker:26.1.4'
-            args '-v /var/run/docker.sock:/var/run/docker.sock'
+            args '-u root:root -v /var/run/docker.sock:/var/run/docker.sock'
         }
     }
 
@@ -40,13 +40,15 @@ pipeline {
 
         stage('Push Image') {
             steps {
-                withCredentials([usernamePassword(
+                withCredentials([
+                  usernamePassword(
                     credentialsId: 'dockerhub-credentials',
                     usernameVariable: 'USER',
                     passwordVariable: 'PASS'
-                )]) {
+                  )
+                ]) {
                     sh '''
-                      echo $PASS | docker login -u $USER --password-stdin
+                      echo "$PASS" | docker login -u "$USER" --password-stdin
                       docker push $DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG
                     '''
                 }
@@ -56,11 +58,9 @@ pipeline {
         stage('Deploy to Kubernetes') {
             steps {
                 sh '''
-                  sed -i "s|your-dockerhub-username/banking-app:v1|$DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG|g" deployment.yaml
-
                   kubectl apply -f deployment.yaml
                   kubectl apply -f service.yaml
-                  kubectl apply -f network-policy.yaml
+                  kubectl apply -f network-policy.yaml || true
                   kubectl apply -f kyverno-policy.yaml || true
 
                   kubectl rollout status deployment/banking-frontend --timeout=5m
@@ -71,10 +71,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ Sprint‑4 Containerization Completed Successfully"
+            echo '✅ Sprint‑4 Pipeline Completed Successfully'
         }
         failure {
-            echo "❌ Pipeline Failed — Check Logs"
+            echo '❌ Pipeline Failed – Check Logs'
         }
         always {
             sh 'docker image prune -f || true'
