@@ -19,10 +19,10 @@ pipeline {
                     echo "Installing DevSecOps tools..."
 
                     sh '''
-                      apt-get update
+                      sudo apt-get update
 
                       # Base tools
-                      apt-get install -y wget apt-transport-https gnupg lsb-release curl
+                      sudo apt-get install -y wget apt-transport-https gnupg lsb-release curl
 
                       # Trivy
                       if ! command -v trivy >/dev/null 2>&1; then
