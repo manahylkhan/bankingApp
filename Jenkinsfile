@@ -1,83 +1,80 @@
 pipeline {
-    agent {
-        docker {
-            image 'docker:26.1.4'
-            args '-u root:root -v /var/run/docker.sock:/var/run/docker.sock'
-        }
+  agent any
+
+  environment {
+    IMAGE_NAME = "manahyl/banking-app"
+    IMAGE_TAG  = "${BUILD_NUMBER}"
+    DOCKER_CONFIG = "${WORKSPACE}/.docker"
+    KUBECONFIG = "/var/lib/jenkins/.kube/config"
+  }
+
+  stages {
+
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
     }
 
-    environment {
-        DOCKERHUB_USER = 'manahyl'
-        IMAGE_NAME = 'banking-app'
-        IMAGE_TAG = "${BUILD_NUMBER}"
-        KUBECONFIG = '/var/lib/jenkins/.kube/config'
+    stage('Prepare Docker Auth Dir') {
+      steps {
+        sh '''
+          mkdir -p $DOCKER_CONFIG
+        '''
+      }
     }
 
-    stages {
-
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
-
-        stage('Build Docker Image') {
-            steps {
-                sh '''
-                  docker build -t $DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG .
-                '''
-            }
-        }
-
-        stage('Trivy Image Scan') {
-            steps {
-                sh '''
-                  trivy image --severity HIGH,CRITICAL \
-                  $DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG || true
-                '''
-            }
-        }
-
-        stage('Push Image') {
-            steps {
-                withCredentials([
-                  usernamePassword(
-                    credentialsId: 'dockerhub-credentials',
-                    usernameVariable: 'USER',
-                    passwordVariable: 'PASS'
-                  )
-                ]) {
-                    sh '''
-                      echo "$PASS" | docker login -u "$USER" --password-stdin
-                      docker push $DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG
-                    '''
-                }
-            }
-        }
-
-        stage('Deploy to Kubernetes') {
-            steps {
-                sh '''
-                  kubectl apply -f deployment.yaml
-                  kubectl apply -f service.yaml
-                  kubectl apply -f network-policy.yaml || true
-                  kubectl apply -f kyverno-policy.yaml || true
-
-                  kubectl rollout status deployment/banking-frontend --timeout=5m
-                '''
-            }
-        }
+    stage('Build Docker Image') {
+      steps {
+        sh '''
+          docker build -t $IMAGE_NAME:$IMAGE_TAG .
+        '''
+      }
     }
 
-    post {
-        success {
-            echo '✅ Sprint‑4 Pipeline Completed Successfully'
-        }
-        failure {
-            echo '❌ Pipeline Failed – Check Logs'
-        }
-        always {
-            sh 'docker image prune -f || true'
-        }
+    stage('Trivy Scan') {
+      steps {
+        sh '''
+          trivy image --exit-code 0 --severity HIGH,CRITICAL $IMAGE_NAME:$IMAGE_TAG
+        '''
+      }
     }
+
+    stage('Push Image') {
+      steps {
+        withCredentials([usernamePassword(
+          credentialsId: 'dockerhub-credentials',
+          usernameVariable: 'DOCKER_USER',
+          passwordVariable: 'DOCKER_PASS'
+        )]) {
+          sh '''
+            echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+            docker push $IMAGE_NAME:$IMAGE_TAG
+          '''
+        }
+      }
+    }
+
+    stage('Deploy to Kubernetes') {
+      steps {
+        sh '''
+          sed -i "s|your-dockerhub-username/banking-app:v1|$IMAGE_NAME:$IMAGE_TAG|g" k8s/deployment.yaml
+          kubectl apply -f k8s/
+          kubectl rollout status deployment/banking-frontend --timeout=180s
+        '''
+      }
+    }
+  }
+
+  post {
+    always {
+      sh 'docker image prune -f || true'
+    }
+    success {
+      echo "✅ PIPELINE SUCCESS"
+    }
+    failure {
+      echo "❌ PIPELINE FAILED"
+    }
+  }
 }
