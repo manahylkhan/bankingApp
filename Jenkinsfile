@@ -77,9 +77,13 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                sh 'kubectl apply -f k8s/'
-            }
-        }
+                sh '''
+                  kubectl config use-context minikube
+                  kubectl apply -f k8s/
+                  kubectl rollout status deployment/secure-bank-pro --timeout=5m
+                '''
+    }
+}
     }
 
     post {
