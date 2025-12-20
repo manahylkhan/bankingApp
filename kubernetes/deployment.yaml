@@ -21,7 +21,7 @@ spec:
         fsGroup: 101
       containers:
       - name: banking-app
-        image: your-dockerhub-username/banking-app:v1 # Replace with your image
+        image: manahyl/banking-app:v1 # Replace with your image
         ports:
         - containerPort: 80
         resources:
