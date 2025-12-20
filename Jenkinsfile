@@ -2,9 +2,11 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "manahyl/banking-app"
-        IMAGE_TAG  = "${BUILD_NUMBER}"
-        KUBECONFIG = "/var/lib/jenkins/.kube/config"
+        IMAGE_NAME     = "bankingapp"
+        IMAGE_TAG      = "${BUILD_NUMBER}"
+        DOCKERHUB_REPO = "manahyl/banking-app"
+        KUBECONFIG     = "/var/lib/jenkins/.kube/config"
+        SONARQUBE_ENV  = "sonarqube"
     }
 
     stages {
@@ -15,9 +17,15 @@ pipeline {
             }
         }
 
-        stage('Prepare Docker Auth Dir') {
+        stage('SonarQube Analysis') {
             steps {
-                sh 'mkdir -p $WORKSPACE/.docker'
+                withSonarQubeEnv("${SONARQUBE_ENV}") {
+                    sh """
+                      sonar-scanner \
+                      -Dsonar.projectKey=bankingapp \
+                      -Dsonar.sources=.
+                    """
+                }
             }
         }
 
@@ -27,13 +35,18 @@ pipeline {
             }
         }
 
-        stage('Trivy Scan') {
+        stage('Trivy Image Scan') {
             steps {
-                sh "trivy image --exit-code 0 --severity HIGH,CRITICAL ${IMAGE_NAME}:${IMAGE_TAG}"
+                sh """
+                  trivy image \
+                  --severity HIGH,CRITICAL \
+                  --exit-code 0 \
+                  ${IMAGE_NAME}:${IMAGE_TAG}
+                """
             }
         }
 
-        stage('Push Image') {
+        stage('Push Image to DockerHub') {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub-credentials',
@@ -42,18 +55,46 @@ pipeline {
                 )]) {
                     sh """
                       echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin
-                      docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                      docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${DOCKERHUB_REPO}:${IMAGE_TAG}
+                      docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}
                     """
                 }
+            }
+        }
+
+        stage('OWASP ZAP Scan') {
+            steps {
+                sh """
+                  docker run --rm \
+                  -v \$(pwd):/zap/wrk \
+                  owasp/zap2docker-stable \
+                  zap-baseline.py \
+                  -t http://localhost:8080 || true
+                """
             }
         }
 
         stage('Deploy to Kubernetes') {
             steps {
                 sh """
-                  sed -i 's|your-dockerhub-username/banking-app:v1|${IMAGE_NAME}:${IMAGE_TAG}|g' kubernetes/deployment.yaml
+                  sed -i 's|IMAGE_TAG|${IMAGE_TAG}|g' kubernetes/deployment.yaml
+                  kubectl apply -f kubernetes/ --validate=false || echo 'K8s skipped'
+                """
+            }
+        }
 
-                  kubectl apply -f kubernetes/ --validate=false || echo '⚠️ K8s deploy skipped'
+        stage('Deploy Falco Runtime Security') {
+            steps {
+                sh """
+                  kubectl apply -f https://raw.githubusercontent.com/falcosecurity/falco/master/deploy/kubernetes/falco.yaml || true
+                """
+            }
+        }
+
+        stage('Simulate SOC Alert') {
+            steps {
+                sh """
+                  echo "⚠️ Suspicious activity detected in container" >> soc-alert.log
                 """
             }
         }
@@ -63,11 +104,11 @@ pipeline {
         always {
             sh 'docker image prune -f'
         }
-        failure {
-            echo '❌ PIPELINE FAILED'
-        }
         success {
-            echo '✅ PIPELINE SUCCESS'
+            echo '✅ DevSecOps Pipeline Completed Successfully'
+        }
+        failure {
+            echo '❌ Pipeline Failed – Check Logs'
         }
     }
 }
