@@ -17,17 +17,17 @@ pipeline {
             }
         }
 
-        stage('SonarQube Analysis') {
-            steps {
-                withSonarQubeEnv("${SONARQUBE_ENV}") {
-                    sh """
-                      sonar-scanner \
-                      -Dsonar.projectKey=bankingapp \
-                      -Dsonar.sources=.
-                    """
-                }
-            }
-        }
+//        stage('SonarQube Analysis') {
+//            steps {
+//                withSonarQubeEnv("${SONARQUBE_ENV}") {
+//                    sh """
+//                      sonar-scanner \
+//                      -Dsonar.projectKey=bankingapp \
+//                      -Dsonar.sources=.
+//                    """
+//                }
+//            }
+//        }
 
         stage('Build Docker Image') {
             steps {
